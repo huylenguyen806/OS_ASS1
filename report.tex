@@ -1,0 +1,239 @@
+\documentclass[12pt]{article}
+    \usepackage[top=1.5cm,bottom=1.5cm,left=2cm,right=2cm, a4paper]{geometry}
+    \usepackage{amsmath}
+    \usepackage{listings}
+    \usepackage{color}
+    \usepackage[colorlinks=true,linkcolor=blue]{hyperref}
+    \usepackage{framed}
+    \usepackage{titling}
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\small,
+    breakatwhitespace=false,
+    breaklines=false,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2
+}
+\lstset{style=mystyle}
+\renewcommand{\familydefault}{\sfdefault}
+\setlength{\droptitle}{-5em}
+
+\begin{document}
+    \title{\textbf{Assignment \#1 - System Calls - REPORT}}
+    \author{Name: Nguyen Le Huy - ID: 1611290}
+    \maketitle
+    \section{Adding a new System Call}
+        \subsection{Preparation}
+            \textbf{Setup Virtual Machine:} You can use Virtual Box or VMware.\\
+            You can choose a version of Ubuntu image at \url{https://www.osboxes.org/ubuntu/}\\
+            \textbf{Install packages:} You have to install nessesary packages to compile and install kernel.
+            \begin{lstlisting}[language=bash]
+$ sudo apt-get update
+$ sudo apt-get install build-essential kernel-package 
+$ sudo apt-get install libncurses5-dev openssl libssl-dev\end{lstlisting}
+            \textbf{QUESTIONS:} Why do we need to install kernel-package?\\
+            \textbf{ANSWER:} Because kernel-package helps automate the routine steps required 
+            to compile and install a custom kernel.\\
+            \textbf{Download and unpack kernel source:} Version 4.4.56 is recommended:
+            \begin{lstlisting}[language=bash]
+$ $ mkdir ~/kernelbuild && cd ~/kernelbuild
+$ wget https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-4.4.56.tar.xz
+$ tar -xJf linux-4.4.56.tar.xz\end{lstlisting}
+            \textbf{QUESTION:} Why do we have to use another kernel source from the 
+            server such as\\ \texttt{http://www.kernel.org}, 
+            can we compile the local kernel on the running OS directly?\\
+            \textbf{ANSWER:} Because local kernel doesn't have source files (.c), so we can't compile it.
+        \subsection{Configuration}
+        Copy content of configuration file:
+        \begin{lstlisting}[language=bash]
+$ cp /boot/config-4.x.x-generic ~/kernelbuild/[kernel directory]/.config\end{lstlisting}
+        \textit{Note:} run \texttt{uname -r} to see 4.x.x-generic. 
+        [kernel directory] will be \texttt{linux-4.4.56}.\\
+        \textbf{Important:} You must rename your kernel version, run terminal 
+        at [kernel directory] with:
+        \begin{lstlisting}[language=bash]
+$ make nconfig // or make menuconfig\end{lstlisting}
+        Go to \texttt{"General setup"}, access to 
+        \texttt{"(-ARCH) Local version - append to kernel release"}, 
+        then enter \texttt{".MSSV"} with MSSV is your student ID. Press \texttt{"F6"} to save 
+        and \texttt{"F9"} to quit.\\
+        If you can't use \texttt{"make nconfig"}, run:
+        \begin{lstlisting}[language=bash]
+$ nano .config\end{lstlisting}
+        then add your MSSV to \texttt{CONFIG\_LOCALVERSION=".MSSV"} and save the file.\\
+        Goto arch/x86/entry/syscalls, add these to both file in this directory:\\
+        In \texttt{syscall\_32.tbl}:
+        \begin{lstlisting}[language=bash]
+[number]    i386    procmem         sys_procmem\end{lstlisting}
+        \textbf{QUESTION:} What is the meaning of other parts, i.e. i386, procmem, and \texttt{sys\_procmem}?\\
+        \textbf{ANSWER:} \texttt{i386} is the application binary interface refers to the compiled binaries in machine code, 
+        \texttt{procmem} is the system call's name, \texttt{sys\_procmem} is the entry point where system call is executed.\\
+        In \texttt{syscall\_64.tbl}:
+        \begin{lstlisting}[language=bash]
+[number]    x32     procmem         sys_procmem\end{lstlisting}
+        Open the file \texttt{include/linux/syscalls.h} and add the following lines to the end of this file:
+        \begin{lstlisting}[language=C++]
+struct proc_segs;
+asmlinkage long sys_procmem(int pid, struct proc_segs *info);\end{lstlisting}
+        Our system call will be implemented in \texttt{arch/x86/kernel} directory in a source file 
+        \texttt{sys\_procmem.c}.\\
+        \textbf{QUESTION:} What is the meaning of each line above?\\
+        \textbf{ANSWER:} Define \texttt{proc\_segs} struct and \texttt{sys\_procmem} system call entry point, 
+        \texttt{sys\_procmem} takes process ID and the address of variable type \texttt{struct proc\_segs}, 
+        finds memory information of that process and store them to that variable, \texttt{asmlinkage} tells 
+        the compiler to look on the CPU stack for the function parameters, instead of registers.
+    \section{System Call Implementation}
+    \subsection{Test System Call using modules}
+    Before write down the system call in \texttt{sys\_procmem.c}, you should test it first using 
+    kernel modules of the current kernel in your virtual machine.\\
+    Let's create a file called \texttt{"test.c"}:
+    \begin{lstlisting}[language=C++]
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/init.h>
+#include <linux/sched.h>
+int init_module(void) {
+    /*Put your code here to test*/
+}
+void cleanup_module(void) {
+    printk(KERN_INFO "Bye.\n");
+}\end{lstlisting}
+    Create a Makefile:
+    \begin{lstlisting}
+obj-m   += test.o
+all:
+    make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
+clean:
+    make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean\end{lstlisting}
+    Then run these lines in terminal in directory contains those files:
+    \begin{lstlisting}[language=bash]
+$ make
+$ sudo insmod test.ko
+$ sudo rmmod test
+$ tail /var/log/syslog\end{lstlisting}
+    The 4th line will show you the result of function \texttt{init\_module} and \texttt{cleanup\_module}.
+    \subsection{Implementation}
+        To implement this system call, use 
+        \texttt{task\_struct} and \texttt{mm\_struct} defined in \texttt{include/linux/sched.h}:
+        \begin{lstlisting}[language=C++]
+struct task_struct {
+    struct mm_struct *mm, *active_mm;
+    pid_t pid;
+    ...
+};
+struct mm_struct {
+    unsigned long start_code, end_code, start_data, end_data;
+    unsigned long start_brk, brk, start_stack;
+    ...
+};      \end{lstlisting}
+        Add these to file \texttt{arch/x86/kernel/sys\_procmem.c}:
+        \begin{lstlisting}[language=C++]
+#include <linux/linkage.h>
+#include <linux/sched.h>
+struct proc_segs {
+    unsigned long mssv; /*Your student ID*/
+    unsigned long start_code, end_code, start_data, end_data;
+    unsigned long start_heap, end_heap, start_stack;
+};
+asmlinkage long sys_procmem(int pid, struct proc_segs *info) {
+    // TODO: Implement the system call
+}       \end{lstlisting}
+        In the same folder of \texttt{sys\_procmem.c}, add this line to the end of \texttt{Makefile}:
+        \begin{lstlisting}
+obj-y       += sys_procmem.o\end{lstlisting}
+    \section{Compilation and Installation Process}
+        \subsection{Compilation}
+            In [kernel directory], run:
+            \begin{lstlisting}
+$ make -j 4
+$ make -j 4 modules\end{lstlisting}
+            \textbf{QUESTION:} What is the meaning of these two stages, namely \texttt{"make"} 
+            and \texttt{"make modules"}?\\
+            \textbf{ANSWER:} \texttt{"make modules"} just compiles the modules. \texttt{"make"} 
+            compiles the kernel and create \texttt{vmlinuz} (kernel image which will be uncompressed and 
+            loaded into memory by GRUB or any boot loader you use).
+        \subsection{Installation}
+            In [kernel directory], run:
+            \begin{lstlisting}
+$ sudo make -j 4 modules_install
+$ sudo make -j 4 install
+$ sudo reboot\end{lstlisting}
+        Hold \texttt{"shift"} key while booting, choose \texttt{"Advanced..."} then choose kernel.\\
+        Check kernel version using \texttt{uname -r}.
+        \subsection{Testing}
+            Use these program to test:
+            \begin{lstlisting}[language=C]
+#include <sys/syscall.h>
+#include <stdio.h>
+#include <unistd.h>
+int main() {
+    long sysvalue;
+    unsigned long info[100];
+    sysvalue = syscall (377, 1, info);
+    printf("My MSSV: %lu\n", info[0]);
+    return 0;
+}           \end{lstlisting}
+            \textbf{QUESTION:} Why this program could indicate whether our system call works or not?\\
+            \textbf{ANSWER:} Because if it works, it will print your student ID.
+    \section{Making API for System Call}
+        Create \texttt{wrapper} directory:
+        \begin{lstlisting}
+$ mkdir ~/wrapper\end{lstlisting}
+        Put this code in \texttt{procmem.h} in \texttt{wrapper}:
+        \begin{lstlisting}[language=C++]
+#ifndef _PROC_MEM_H_
+#define _PROC_MEM_H_
+#include <unistd.h>
+#include <sys/types.h>
+struct proc_segs {
+    unsigned long mssv; /*Your student ID*/
+    unsigned long start_code, end_code, start_data, end_data;
+    unsigned long start_heap, end_heap, start_stack;
+};
+long procmem(pid_t pid, struct proc_segs *info);
+#endif // _PROC_MEM_H_\end{lstlisting}
+        \textbf{QUESTION:} Why we have to re-define proc\_segs struct while we 
+        have already defined it inside the kernel?\\
+        \textbf{ANSWER:} Because we can't get that struct in kernel directly, the compiler won't know 
+        where to find that struct if we don't re-define it.\\
+        Put this code in \texttt{procmem.c} in \texttt{wrapper}:
+        \begin{lstlisting}[language=C++]
+#include "procmem.h"
+#include <linux/kernel.h>
+#include <sys/syscall.h>
+long procmem(pid_t pid, struct proc_segs *info) {
+    // TODO: implement the wrapper here.
+}\end{lstlisting}
+        Copy our header file to header directory of our system and compile as a shared object:
+        \begin{lstlisting}
+$ cd ~/wrapper
+$ sudo cp procmem.h /usr/include
+$ gcc -shared -fpic procmem.c -o libprocmem.so\end{lstlisting}
+        If the compilation ends successfully:
+        \begin{lstlisting}
+$ sudo cp libprocmem.so /usr/lib\end{lstlisting}
+        \textbf{QUESTION:} Why root privilege (e.g. adding sudo before the cp command) is 
+        required to copy the header file to \texttt{/usr/include}?\\
+        \textbf{ANSWER:} Because only root user can write files and folders in \texttt{/usr}\\
+        \textbf{QUESTION:} Why we must put -share and -fpic option into gcc command?\\
+        \textbf{ANSWER:} Because -shared creates a shared library which is loaded by programs when 
+        they start. Using -fpic option usually generates smaller and faster code, but will have 
+        platform-dependent limitations, such as the number of globally visible symbols or the 
+        size of the code.\\
+\end{document}
+    
+    
